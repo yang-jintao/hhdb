@@ -23,7 +23,7 @@ import (
 	"time"
 
 	//	"course/labgob"
-	"course/labrpc"
+	"hhdb/labrpc"
 )
 
 // as each Raft peer becomes aware that successive log entries are

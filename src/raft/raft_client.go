@@ -36,3 +36,24 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 	fmt.Println("RequestVote")
 	LOG(rf.me, int(rf.CurrentTerm), DVote, "-> S%d, Vote granted", args.CandidateId)
 }
+
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+
+	reply.Term = rf.CurrentTerm
+	reply.Success = false
+
+	if args.Term < rf.CurrentTerm {
+		fmt.Println("AppendEntries")
+		LOG(rf.me, int(rf.CurrentTerm), DLog2, "<- S%d, Reject log", args.LeaderId)
+		return
+	}
+
+	if args.Term >= rf.CurrentTerm {
+		rf.becomeFollower(args.Term)
+	}
+
+	rf.resetElectionTimeout()
+	reply.Success = true
+}
