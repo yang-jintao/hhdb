@@ -10,8 +10,8 @@ package raft
 
 import (
 	"bytes"
-	"course/labgob"
-	"course/labrpc"
+	"hhdb/labgob"
+	"hhdb/labrpc"
 	"log"
 	"math/rand"
 	"runtime"
