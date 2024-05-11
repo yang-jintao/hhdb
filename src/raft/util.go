@@ -49,6 +49,7 @@ func getTopicLevel(topic logTopic) int {
 }
 
 func getEnvLevel() int {
+	//os.Setenv("VERBOSE", "2")
 	v := os.Getenv("VERBOSE")
 	level := getTopicLevel(DError) + 1
 	if v != "" {

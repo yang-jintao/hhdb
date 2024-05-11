@@ -5,12 +5,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="76059c87-9f34-429e-bc62-3e612107441f" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/raft/raft_apply.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/raft/util_test.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/raft/raft.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/raft/raft_client.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_client.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/raft/raft_heat.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_heat.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/raft/raft_vote.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_vote.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/raft/util.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/util.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -58,7 +54,7 @@
       <recent name="$PROJECT_DIR$/src" />
     </key>
   </component>
-  <component name="RunManager" selected="Go Test.TestInitialElectionPartA in hhdb/raft">
+  <component name="RunManager" selected="Go Test.TestLOG/测试输出日志 in hhdb/raft">
     <configuration name="TestInitialElectionPartA in course/raft" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
       <module name="hhdb" />
       <working_directory value="$PROJECT_DIR$/src/raft" />
@@ -83,8 +79,21 @@
       <pattern value="^\QTestInitialElectionPartA\E$" />
       <method v="2" />
     </configuration>
+    <configuration name="TestLOG/测试输出日志 in hhdb/raft" type="GoTestRunConfiguration" factoryName="Go Test" temporary="true" nameIsGenerated="true">
+      <module name="hhdb" />
+      <working_directory value="$PROJECT_DIR$/src/raft" />
+      <root_directory value="$PROJECT_DIR$/src" />
+      <kind value="PACKAGE" />
+      <package value="hhdb/raft" />
+      <directory value="$PROJECT_DIR$" />
+      <filePath value="$PROJECT_DIR$" />
+      <framework value="gotest" />
+      <pattern value="^\QTestLOG\E$/^\Q测试输出日志\E$" />
+      <method v="2" />
+    </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Go Test.TestLOG/测试输出日志 in hhdb/raft" />
         <item itemvalue="Go Test.TestInitialElectionPartA in hhdb/raft" />
         <item itemvalue="Go Test.TestInitialElectionPartA in course/raft" />
       </list>
@@ -107,5 +116,26 @@
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/src/raft/util.go</url>
+          <line>77</line>
+          <option name="timeStamp" value="2" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/src/raft/util.go</url>
+          <line>78</line>
+          <option name="timeStamp" value="4" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/src/raft/util.go</url>
+          <line>53</line>
+          <option name="timeStamp" value="5" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
   </component>
 </project>
