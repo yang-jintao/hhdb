@@ -64,6 +64,15 @@ type Raft struct {
 
 	electionStart   time.Time
 	electionTimeout time.Duration
+
+	log        []LogEntry
+	nextIndex  []int
+	matchIndex []int
+
+	commitIndex int           // 全局日志提交进度
+	lastApplied int           // 本 Peer 日志 apply 进度
+	applyCond   *sync.Cond    // 唤醒 apply 的工作流
+	applyCh     chan ApplyMsg // apply 的过程，就是将 applyMsg 通过构造 Peer 时传进来的 channel 返回给应用层。因此还需要保存下这个 applyCh
 }
 
 // return currentTerm and whether this server
@@ -187,6 +196,15 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.CurrentTerm = 0
 	rf.VotedFor = -1
 
+	rf.log = append(rf.log, LogEntry{})
+	rf.matchIndex = make([]int, len(rf.peers))
+	rf.nextIndex = make([]int, len(rf.peers))
+
+	rf.applyCh = applyCh
+	rf.applyCond = sync.NewCond(&rf.mu)
+	rf.commitIndex = 0
+	rf.lastApplied = 0
+
 	// Your initialization code here (PartA, PartB, PartC).
 
 	// initialize from state persisted before a crash
@@ -194,6 +212,7 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// start ticker goroutine to start elections
 	go rf.electionTicker()
+	go rf.applyTicker()
 
 	return rf
 }
