@@ -79,7 +79,7 @@ func LOG(peerId int, term int, topic logTopic, format string, a ...interface{}) 
 		time /= 100
 		prefix := fmt.Sprintf("%06d T%04d %v S%d ", time, term, string(topic), peerId)
 		format = prefix + format
-		fmt.Printf(format, a...)
+		//fmt.Printf(format, a...)
 		log.Printf(format, a...)
 	}
 }

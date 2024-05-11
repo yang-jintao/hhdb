@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"fmt"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -24,7 +23,7 @@ type RequestVoteArgs struct {
 	// Your data here (PartA, PartB).
 	Term         int64
 	CandidateId  int
-	LastLogIndex int64
+	LastLogIndex int
 	LastLogTerm  int64
 }
 
@@ -77,7 +76,7 @@ func (rf *Raft) becomeFollower(term int64) {
 		return
 	}
 
-	fmt.Println("becomeFollower")
+	//fmt.Println("becomeFollower")
 	LOG(rf.me, int(rf.CurrentTerm), DLog, "%s -> Follower, For T%d->T%d",
 		rf.role, rf.CurrentTerm, term)
 
@@ -93,12 +92,12 @@ func (rf *Raft) becomeFollower(term int64) {
 func (rf *Raft) becomeCandidate() {
 	// 领导者不能直接成为候选者，必须先成为跟随者，再变为候选者
 	if rf.role == Leader {
-		fmt.Println("becomeCandidate leader")
+		//fmt.Println("becomeCandidate leader")
 		LOG(rf.me, int(rf.CurrentTerm), DError, "Leader can't become Candidate")
 		return
 	}
 
-	fmt.Println("becomeCandidate")
+	//fmt.Println("becomeCandidate")
 	LOG(rf.me, int(rf.CurrentTerm), DVote, "%s -> Candidate, For T%d->T%d",
 		rf.role, rf.CurrentTerm, rf.CurrentTerm+1)
 
@@ -113,11 +112,16 @@ func (rf *Raft) becomeLeader() {
 		return
 	}
 
-	fmt.Println("becomeLeader")
+	//fmt.Println("becomeLeader")
 	LOG(rf.me, int(rf.CurrentTerm), DLeader, "%s -> Leader, For T%d",
 		rf.role, rf.CurrentTerm)
 
 	rf.role = Leader
+
+	for peer := 0; peer < len(rf.peers); peer++ {
+		rf.nextIndex[peer] = len(rf.log)
+		rf.matchIndex[peer] = 0
+	}
 }
 
 // example code to send a RequestVote RPC to a server.
@@ -158,7 +162,7 @@ func (rf *Raft) startElection(term int64) {
 		reply := &RequestVoteReply{}
 		ok := rf.sendRequestVote(peer, args, reply)
 		if !ok {
-			fmt.Println("startElection")
+			//fmt.Println("startElection")
 			LOG(rf.me, int(rf.CurrentTerm), DDebug, "Ask vote from %d, Lost or error", peer)
 			return
 		}
@@ -167,7 +171,7 @@ func (rf *Raft) startElection(term int64) {
 		defer rf.mu.Unlock()
 
 		if rf.contextLostLocked(Candidate, term) {
-			fmt.Println("startElection")
+			//fmt.Println("startElection")
 			LOG(rf.me, int(rf.CurrentTerm), DVote, "Lost context, abort RequestVoteReply in T%d", rf.CurrentTerm)
 			return
 		}
@@ -196,6 +200,7 @@ func (rf *Raft) startElection(term int64) {
 		return
 	}
 
+	l := len(rf.log)
 	for peer := 0; peer < len(rf.peers); peer++ {
 		if peer == rf.me {
 			voted++
@@ -203,8 +208,10 @@ func (rf *Raft) startElection(term int64) {
 		}
 
 		requestArgs := &RequestVoteArgs{
-			Term:        rf.CurrentTerm,
-			CandidateId: rf.me,
+			Term:         rf.CurrentTerm,
+			CandidateId:  rf.me,
+			LastLogIndex: l - 1,
+			LastLogTerm:  rf.log[l-1].Term,
 			//CandidateId: rf.VotedFor,
 		}
 
