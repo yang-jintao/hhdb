@@ -5,11 +5,14 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="76059c87-9f34-429e-bc62-3e612107441f" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/raft/raft_persistence.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/raft/raft_compaction.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/raft/raft_log.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/raft/raft.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/raft/raft_apply.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_apply.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/raft/raft_client.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_client.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/raft/raft_heat.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_heat.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/raft/raft_persistence.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_persistence.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/raft/raft_vote.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/raft/raft_vote.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />

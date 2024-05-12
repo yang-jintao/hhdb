@@ -7,7 +7,7 @@ import (
 )
 
 func (rf *Raft) persistString() string {
-	return fmt.Sprintf("T%d, VotedFor: %d, Log: [0: %d)", rf.CurrentTerm, rf.VotedFor, len(rf.log))
+	return fmt.Sprintf("T%d, VotedFor: %d, Log: [0: %d)", rf.currentTerm, rf.VotedFor, rf.log.size())
 }
 
 // 持久化存储接口
@@ -16,13 +16,15 @@ func (rf *Raft) persistLock() {
 	e := labgob.NewEncoder(w)
 
 	// 根据论文所述，持久化日志、任期、投票结果
-	e.Encode(rf.CurrentTerm)
+	e.Encode(rf.currentTerm)
 	e.Encode(rf.VotedFor)
-	e.Encode(rf.log)
+	//e.Encode(rf.log)
+	// 持久化日志，不包括snapshot，snapshot在Save()中持久化
+	rf.log.persist(e)
 
 	raftState := w.Bytes()
-	rf.persister.Save(raftState, nil)
-	LOG(rf.me, int(rf.CurrentTerm), DPersist, "Persist: %v", rf.persistString())
+	rf.persister.Save(raftState, rf.log.snapshot)
+	LOG(rf.me, int(rf.currentTerm), DPersist, "Persist: %v", rf.persistString())
 }
 
 // 读持久化的数据接口
@@ -33,29 +35,33 @@ func (rf *Raft) readPersist(data []byte) {
 
 	var currentTerm int64
 	var votedFor int
-	var log []LogEntry
 
 	r := bytes.NewBuffer(data)
 	d := labgob.NewDecoder(r)
 	if err := d.Decode(&currentTerm); err != nil {
-		LOG(rf.me, int(rf.CurrentTerm), DPersist, "Read currentTerm error: %v", err)
+		LOG(rf.me, int(rf.currentTerm), DPersist, "Read currentTerm error: %v", err)
 		return
 	}
-	rf.CurrentTerm = currentTerm
+	rf.currentTerm = currentTerm
 
 	if err := d.Decode(&votedFor); err != nil {
-		LOG(rf.me, int(rf.CurrentTerm), DPersist, "Read votedFor error: %v", err)
+		LOG(rf.me, int(rf.currentTerm), DPersist, "Read votedFor error: %v", err)
 		return
 	}
 
 	rf.VotedFor = votedFor
 
-	if err := d.Decode(&log); err != nil {
-		LOG(rf.me, int(rf.CurrentTerm), DPersist, "Read log error: %v", err)
+	if err := rf.log.readPersist(d); err != nil {
+		LOG(rf.me, int(rf.currentTerm), DPersist, "Read log error: %v", err)
 		return
 	}
+	rf.log.snapshot = rf.persister.ReadSnapshot()
 
-	rf.log = log
+	// todo: 目的？
+	if rf.log.snapLastIndex > rf.commitIndex {
+		rf.commitIndex = rf.log.snapLastIndex
+		rf.lastApplied = rf.log.snapLastIndex
+	}
 
-	LOG(rf.me, int(rf.CurrentTerm), DPersist, "Read from persist: %v", rf.persistString())
+	LOG(rf.me, int(rf.currentTerm), DPersist, "Read from persist: %v", rf.persistString())
 }

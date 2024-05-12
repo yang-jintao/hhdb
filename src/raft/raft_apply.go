@@ -7,7 +7,7 @@ func (rf *Raft) applyTicker() {
 
 		entries := make([]LogEntry, 0)
 		for i := rf.lastApplied + 1; i <= rf.commitIndex; i++ {
-			entries = append(entries, rf.log[i])
+			entries = append(entries, rf.log.at(i))
 		}
 		rf.mu.Unlock()
 
@@ -20,7 +20,7 @@ func (rf *Raft) applyTicker() {
 		}
 
 		rf.mu.Lock()
-		LOG(rf.me, int(rf.CurrentTerm), DApply, "Apply log for [%d, %d]",
+		LOG(rf.me, int(rf.currentTerm), DApply, "Apply log for [%d, %d]",
 			rf.lastApplied+1, rf.lastApplied+len(entries))
 		rf.lastApplied += len(entries)
 		rf.mu.Unlock()

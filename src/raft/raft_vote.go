@@ -44,7 +44,7 @@ func (rf *Raft) electionTicker() {
 		//	开始选举
 		if rf.role != Leader && rf.electionIsTimeout() {
 			rf.becomeCandidate()
-			go rf.startElection(rf.CurrentTerm)
+			go rf.startElection(rf.currentTerm)
 
 		}
 		rf.mu.Unlock()
@@ -72,23 +72,23 @@ func (rf *Raft) resetElectionTimeout() {
 }
 
 func (rf *Raft) becomeFollower(term int64) {
-	if term < rf.CurrentTerm {
+	if term < rf.currentTerm {
 		return
 	}
 
 	//fmt.Println("becomeFollower")
-	LOG(rf.me, int(rf.CurrentTerm), DLog, "%s -> Follower, For T%d->T%d",
-		rf.role, rf.CurrentTerm, term)
+	LOG(rf.me, int(rf.currentTerm), DLog, "%s -> Follower, For T%d->T%d",
+		rf.role, rf.currentTerm, term)
 
 	rf.role = Follower
 
-	shouldPersit := rf.CurrentTerm != term
+	shouldPersit := rf.currentTerm != term
 	// 	如果当前任期小，说明自己是leader、follower或者是candidate但是版本落后，可能是出现了分区，然后就可以走一步，因为他们肯定不需要参与这一轮的投票，所以VotedFor应当为-1，表示清除投票
 	// 如果任期相同，说明只本来是 Candidate ，它一定投了自己。而论文中说的是不能在同一 term 中投两次，因此不能清除投票。即，一旦投了，就不能再撤回甚至改投了。
-	if term > rf.CurrentTerm {
+	if term > rf.currentTerm {
 		rf.VotedFor = -1
 	}
-	rf.CurrentTerm = term
+	rf.currentTerm = term
 
 	//term 是有可能不变的。在 term 不变时，并不需要 persist 因为 term 不变，votedFor 一定不会被重新赋值。
 	if shouldPersit {
@@ -100,16 +100,16 @@ func (rf *Raft) becomeCandidate() {
 	// 领导者不能直接成为候选者，必须先成为跟随者，再变为候选者
 	if rf.role == Leader {
 		//fmt.Println("becomeCandidate leader")
-		LOG(rf.me, int(rf.CurrentTerm), DError, "Leader can't become Candidate")
+		LOG(rf.me, int(rf.currentTerm), DError, "Leader can't become Candidate")
 		return
 	}
 
 	//fmt.Println("becomeCandidate")
-	LOG(rf.me, int(rf.CurrentTerm), DVote, "%s -> Candidate, For T%d->T%d",
-		rf.role, rf.CurrentTerm, rf.CurrentTerm+1)
+	LOG(rf.me, int(rf.currentTerm), DVote, "%s -> Candidate, For T%d->T%d",
+		rf.role, rf.currentTerm, rf.currentTerm+1)
 
 	rf.role = Candidate
-	rf.CurrentTerm++
+	rf.currentTerm++
 	rf.VotedFor = rf.me
 
 	// 持久化更新的数据
@@ -123,13 +123,13 @@ func (rf *Raft) becomeLeader() {
 	}
 
 	//fmt.Println("becomeLeader")
-	LOG(rf.me, int(rf.CurrentTerm), DLeader, "%s -> Leader, For T%d",
-		rf.role, rf.CurrentTerm)
+	LOG(rf.me, int(rf.currentTerm), DLeader, "%s -> Leader, For T%d",
+		rf.role, rf.currentTerm)
 
 	rf.role = Leader
 
 	for peer := 0; peer < len(rf.peers); peer++ {
-		rf.nextIndex[peer] = len(rf.log)
+		rf.nextIndex[peer] = rf.log.size()
 		rf.matchIndex[peer] = 0
 	}
 }
@@ -173,7 +173,7 @@ func (rf *Raft) startElection(term int64) {
 		ok := rf.sendRequestVote(peer, args, reply)
 		if !ok {
 			//fmt.Println("startElection")
-			LOG(rf.me, int(rf.CurrentTerm), DDebug, "Ask vote from %d, Lost or error", peer)
+			LOG(rf.me, int(rf.currentTerm), DDebug, "Ask vote from %d, Lost or error", peer)
 			return
 		}
 
@@ -182,11 +182,11 @@ func (rf *Raft) startElection(term int64) {
 
 		if rf.contextLostLocked(Candidate, term) {
 			//fmt.Println("startElection")
-			LOG(rf.me, int(rf.CurrentTerm), DVote, "Lost context, abort RequestVoteReply in T%d", rf.CurrentTerm)
+			LOG(rf.me, int(rf.currentTerm), DVote, "Lost context, abort RequestVoteReply in T%d", rf.currentTerm)
 			return
 		}
 
-		if reply.Term > rf.CurrentTerm {
+		if reply.Term > rf.currentTerm {
 			rf.becomeFollower(reply.Term)
 			return
 		}
@@ -210,7 +210,7 @@ func (rf *Raft) startElection(term int64) {
 		return
 	}
 
-	l := len(rf.log)
+	l := rf.log.size()
 	for peer := 0; peer < len(rf.peers); peer++ {
 		if peer == rf.me {
 			voted++
@@ -218,10 +218,10 @@ func (rf *Raft) startElection(term int64) {
 		}
 
 		requestArgs := &RequestVoteArgs{
-			Term:         rf.CurrentTerm,
+			Term:         rf.currentTerm,
 			CandidateId:  rf.me,
 			LastLogIndex: l - 1,
-			LastLogTerm:  rf.log[l-1].Term,
+			LastLogTerm:  rf.log.at(l - 1).Term,
 			//CandidateId: rf.VotedFor,
 		}
 
