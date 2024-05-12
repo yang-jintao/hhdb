@@ -18,6 +18,7 @@ package raft
 //
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -75,6 +76,11 @@ type Raft struct {
 	applyCh     chan ApplyMsg // apply 的过程，就是将 applyMsg 通过构造 Peer 时传进来的 channel 返回给应用层。因此还需要保存下这个 applyCh
 }
 
+const (
+	InvalidTerm  int64 = 0
+	InvalidIndex int   = 0
+)
+
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int64, bool) {
@@ -102,25 +108,25 @@ func (rf *Raft) persist() {
 	// rf.persister.Save(raftstate, nil)
 }
 
-// restore previously persisted state.
-func (rf *Raft) readPersist(data []byte) {
-	if data == nil || len(data) < 1 { // bootstrap without any state?
-		return
-	}
-	// Your code here (PartC).
-	// Example:
-	// r := bytes.NewBuffer(data)
-	// d := labgob.NewDecoder(r)
-	// var xxx
-	// var yyy
-	// if d.Decode(&xxx) != nil ||
-	//    d.Decode(&yyy) != nil {
-	//   error...
-	// } else {
-	//   rf.xxx = xxx
-	//   rf.yyy = yyy
-	// }
-}
+//// restore previously persisted state.
+//func (rf *Raft) readPersist(data []byte) {
+//	if data == nil || len(data) < 1 { // bootstrap without any state?
+//		return
+//	}
+//	// Your code here (PartC).
+//	// Example:
+//	// r := bytes.NewBuffer(data)
+//	// d := labgob.NewDecoder(r)
+//	// var xxx
+//	// var yyy
+//	// if d.Decode(&xxx) != nil ||
+//	//    d.Decode(&yyy) != nil {
+//	//   error...
+//	// } else {
+//	//   rf.xxx = xxx
+//	//   rf.yyy = yyy
+//	// }
+//}
 
 // the service says it has created a snapshot that has
 // all info up to and including index. this means the
@@ -144,13 +150,51 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 // term. the third return value is true if this server believes it is
 // the leader.
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	index := -1
-	term := -1
-	isLeader := true
+	rf.mu.Lock()
+	defer rf.mu.Unlock()
+	// 如果不是leader，则返回错误，因为只有leader有资格写数据
+	if rf.role != Leader {
+		return 0, 0, false
+	}
 
-	// Your code here (PartB).
+	// 添加日志请求
+	rf.log = append(rf.log, LogEntry{
+		Term:         rf.CurrentTerm,
+		CommandValid: true,
+		Command:      command,
+	})
+	LOG(rf.me, int(rf.CurrentTerm), DLeader, "Leader accept log [%d]T%d", len(rf.log)-1, rf.CurrentTerm)
 
-	return index, term, isLeader
+	// 持久化日志
+	rf.persistLock()
+
+	return len(rf.log) - 1, int(rf.CurrentTerm), true
+}
+
+func (rf *Raft) logString() string {
+	var terms string
+	prevTerm := rf.log[0].Term
+	prevStart := 0
+	for i := 0; i < len(rf.log); i++ {
+		if rf.log[i].Term != prevTerm {
+			terms += fmt.Sprintf(" [%d, %d]T%d", prevStart, i-1, prevTerm)
+			prevTerm = rf.log[i].Term
+			prevStart = i
+		}
+	}
+	terms += fmt.Sprintf("[%d, %d]T%d", prevStart, len(rf.log)-1, prevTerm)
+	return terms
+}
+
+func (rf *Raft) firstLogFor(term int64) int {
+	for idx, entry := range rf.log {
+		if entry.Term == term {
+			return idx
+		} else if entry.Term > term {
+			break
+		}
+	}
+	return InvalidIndex
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
