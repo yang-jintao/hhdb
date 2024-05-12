@@ -18,7 +18,6 @@ package raft
 //
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -60,15 +59,17 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 	role        Role
-	CurrentTerm int64
+	currentTerm int64
 	VotedFor    int // 投票给谁成为leader，那个被投票人的ID
 
 	electionStart   time.Time
 	electionTimeout time.Duration
 
-	log        []LogEntry
+	log        *RaftLog
 	nextIndex  []int
 	matchIndex []int
+
+	snapPending bool
 
 	commitIndex int           // 全局日志提交进度
 	lastApplied int           // 本 Peer 日志 apply 进度
@@ -87,7 +88,7 @@ func (rf *Raft) GetState() (int64, bool) {
 	// Your code here (PartA).
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	return rf.CurrentTerm, rf.role == Leader
+	return rf.currentTerm, rf.role == Leader
 }
 
 // save Raft's persistent state to stable storage,
@@ -128,15 +129,6 @@ func (rf *Raft) persist() {
 //	// }
 //}
 
-// the service says it has created a snapshot that has
-// all info up to and including index. this means the
-// service no longer needs the log through (and including)
-// that index. Raft should now trim its log as much as possible.
-func (rf *Raft) Snapshot(index int, snapshot []byte) {
-	// Your code here (PartD).
-
-}
-
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
 // server isn't the leader, returns false. otherwise start the
@@ -158,43 +150,17 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 
 	// 添加日志请求
-	rf.log = append(rf.log, LogEntry{
-		Term:         rf.CurrentTerm,
+	rf.log.append(LogEntry{
+		Term:         rf.currentTerm,
 		CommandValid: true,
 		Command:      command,
 	})
-	LOG(rf.me, int(rf.CurrentTerm), DLeader, "Leader accept log [%d]T%d", len(rf.log)-1, rf.CurrentTerm)
+	LOG(rf.me, int(rf.currentTerm), DLeader, "Leader accept log [%d]T%d", rf.log.size()-1, rf.currentTerm)
 
 	// 持久化日志
 	rf.persistLock()
 
-	return len(rf.log) - 1, int(rf.CurrentTerm), true
-}
-
-func (rf *Raft) logString() string {
-	var terms string
-	prevTerm := rf.log[0].Term
-	prevStart := 0
-	for i := 0; i < len(rf.log); i++ {
-		if rf.log[i].Term != prevTerm {
-			terms += fmt.Sprintf(" [%d, %d]T%d", prevStart, i-1, prevTerm)
-			prevTerm = rf.log[i].Term
-			prevStart = i
-		}
-	}
-	terms += fmt.Sprintf("[%d, %d]T%d", prevStart, len(rf.log)-1, prevTerm)
-	return terms
-}
-
-func (rf *Raft) firstLogFor(term int64) int {
-	for idx, entry := range rf.log {
-		if entry.Term == term {
-			return idx
-		} else if entry.Term > term {
-			break
-		}
-	}
-	return InvalidIndex
+	return rf.log.size() - 1, int(rf.currentTerm), true
 }
 
 // the tester doesn't halt goroutines created by Raft after each test,
@@ -217,7 +183,7 @@ func (rf *Raft) killed() bool {
 }
 
 func (rf *Raft) contextLostLocked(role Role, term int64) bool {
-	return !(rf.CurrentTerm == term && rf.role == role)
+	return !(rf.currentTerm == term && rf.role == role)
 }
 
 // the service or tester wants to create a Raft server. the ports
@@ -237,10 +203,11 @@ func Make(peers []*labrpc.ClientEnd, me int,
 	rf.me = me
 
 	rf.role = Follower
-	rf.CurrentTerm = 0
+	rf.currentTerm = 0
 	rf.VotedFor = -1
 
-	rf.log = append(rf.log, LogEntry{})
+	//rf.log = append(rf.log, LogEntry{})
+	rf.log = NewLog(0, 0, nil, nil)
 	rf.matchIndex = make([]int, len(rf.peers))
 	rf.nextIndex = make([]int, len(rf.peers))
 

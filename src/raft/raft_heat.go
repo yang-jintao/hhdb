@@ -51,21 +51,21 @@ func (rf *Raft) startReplication(term int64) bool {
 		ok := rf.sendAppendEntries(peer, args, reply)
 		if !ok {
 			//fmt.Println("startReplication")
-			LOG(rf.me, int(rf.CurrentTerm), DLog, "-> S%d, Lost or crashed", peer)
+			LOG(rf.me, int(rf.currentTerm), DLog, "-> S%d, Lost or crashed", peer)
 			return
 		}
 
 		rf.mu.Lock()
 		defer rf.mu.Unlock()
 
-		if reply.Term > rf.CurrentTerm {
+		if reply.Term > rf.currentTerm {
 			rf.becomeFollower(reply.Term)
 			return
 		}
 
 		// check context lost
 		if rf.contextLostLocked(Leader, term) {
-			LOG(rf.me, int(rf.CurrentTerm), DLog, "-> S%d, Context Lost, T%d:Leader->T%d:%s", peer, term, rf.CurrentTerm, rf.role)
+			LOG(rf.me, int(rf.currentTerm), DLog, "-> S%d, Context Lost, T%d:Leader->T%d:%s", peer, term, rf.currentTerm, rf.role)
 			return
 		}
 
@@ -87,7 +87,7 @@ func (rf *Raft) startReplication(term int64) bool {
 			if reply.ConflictTerm == InvalidTerm {
 				rf.nextIndex[peer] = reply.ConflictIndex
 			} else {
-				firstIndex := rf.firstLogFor(reply.ConflictTerm)
+				firstIndex := rf.log.firstFor(reply.ConflictTerm)
 				if firstIndex != InvalidIndex {
 					rf.nextIndex[peer] = firstIndex
 				} else {
@@ -102,9 +102,16 @@ func (rf *Raft) startReplication(term int64) bool {
 				rf.nextIndex[peer] = preIndex
 			}
 
-			LOG(rf.me, int(rf.CurrentTerm), DLog, "-> S%d, Not matched at Prev=[%d]T%d, Try next Prev=[%d]T%d",
-				peer, args.PrevLogIndex, args.PrevLogTerm, rf.nextIndex[peer]-1, rf.log[rf.nextIndex[peer]-1])
-			LOG(rf.me, int(rf.CurrentTerm), DDebug, "-> S%d, Leader log=%v", peer, rf.logString())
+			// 仅仅是为了打日志
+			nextPrevIndex := rf.nextIndex[peer] - 1
+			nextPrevTerm := InvalidTerm
+			if nextPrevIndex >= rf.log.snapLastIndex {
+				nextPrevTerm = rf.log.at(nextPrevIndex).Term
+			}
+
+			LOG(rf.me, int(rf.currentTerm), DLog, "-> S%d, Not matched at Prev=[%d]T%d, Try next Prev=[%d]T%d",
+				peer, args.PrevLogIndex, args.PrevLogTerm, nextPrevTerm, nextPrevIndex)
+			LOG(rf.me, int(rf.currentTerm), DDebug, "-> S%d, Leader log=%v", peer, rf.log.String())
 			return
 		}
 
@@ -113,8 +120,8 @@ func (rf *Raft) startReplication(term int64) bool {
 
 		majorityMatched := rf.getMajorityIndexLocked()
 		// 第二个判断条件，是指只能本次任期的提交来间接提交之前任期的log
-		if majorityMatched > rf.commitIndex && rf.log[majorityMatched].Term == rf.CurrentTerm {
-			LOG(rf.me, int(rf.CurrentTerm), DApply, "Leader update the commit index %d->%d",
+		if majorityMatched > rf.commitIndex && rf.log.at(majorityMatched).Term == rf.currentTerm {
+			LOG(rf.me, int(rf.currentTerm), DApply, "Leader update the commit index %d->%d",
 				rf.commitIndex, majorityMatched)
 			rf.commitIndex = majorityMatched
 			rf.applyCond.Signal()
@@ -125,31 +132,44 @@ func (rf *Raft) startReplication(term int64) bool {
 	defer rf.mu.Unlock()
 	if rf.contextLostLocked(Leader, term) {
 		//fmt.Println("startReplication")
-		LOG(rf.me, int(rf.CurrentTerm), DLeader, "Leader[T%d] -> %s[T%d]", term, rf.role, rf.CurrentTerm)
+		LOG(rf.me, int(rf.currentTerm), DLeader, "Leader[T%d] -> %s[T%d]", term, rf.role, rf.currentTerm)
 		return false
 	}
 
 	for peer := 0; peer < len(rf.peers); peer++ {
 		if peer == rf.me {
-			rf.matchIndex[peer] = len(rf.log) - 1
-			rf.nextIndex[peer] = len(rf.log)
+			rf.matchIndex[peer] = rf.log.size() - 1
+			rf.nextIndex[peer] = rf.log.size()
 			continue
 		}
 
 		prevIdx := rf.nextIndex[peer] - 1
-		prevTerm := rf.log[prevIdx].Term
+		if prevIdx < rf.log.snapLastIndex {
+			args := &InstallSnapshotArgs{
+				Term:              rf.currentTerm,
+				LeaderId:          rf.me,
+				LastIncludedIndex: rf.log.snapLastIndex,
+				LastIncludedTerm:  rf.log.snapLastTerm,
+				Snapshot:          rf.log.snapshot,
+			}
+			LOG(rf.me, int(rf.currentTerm), DDebug, "-> S%d, SendSnap, Args=%v", peer, args.String())
+			go rf.installToPeer(peer, term, args)
+			continue
+		}
+
+		prevTerm := rf.log.at(prevIdx).Term
 
 		args := &AppendEntriesArgs{
-			Term:         rf.CurrentTerm,
+			Term:         rf.currentTerm,
 			LeaderId:     rf.me,
 			PrevLogIndex: prevIdx,
 			PrevLogTerm:  prevTerm,
-			Entries:      append([]LogEntry(nil), append(rf.log[prevIdx+1:])...),
+			Entries:      rf.log.tail(prevIdx + 1),
 			LeaderCommit: rf.commitIndex,
 		}
 
 		go replicationToPeer(peer, args)
-		LOG(rf.me, int(rf.CurrentTerm), DDebug, "-> S%d, Send log, Prev=[%d]T%d, Len()=%d",
+		LOG(rf.me, int(rf.currentTerm), DDebug, "-> S%d, Send log, Prev=[%d]T%d, Len()=%d",
 			peer, args.PrevLogIndex, args.PrevLogTerm, len(args.Entries))
 	}
 
@@ -168,7 +188,7 @@ func (rf *Raft) getMajorityIndexLocked() int {
 	copy(tmpIndexes, rf.matchIndex)
 	sort.Ints(sort.IntSlice(tmpIndexes))
 	majorityIdx := (len(tmpIndexes) - 1) / 2
-	LOG(rf.me, int(rf.CurrentTerm), DDebug, "Match index after sort: %v, majority[%d]=%d",
+	LOG(rf.me, int(rf.currentTerm), DDebug, "Match index after sort: %v, majority[%d]=%d",
 		tmpIndexes, majorityIdx, tmpIndexes[majorityIdx])
 	return tmpIndexes[majorityIdx] // min -> max
 }
