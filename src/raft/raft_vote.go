@@ -80,13 +80,20 @@ func (rf *Raft) becomeFollower(term int64) {
 	LOG(rf.me, int(rf.CurrentTerm), DLog, "%s -> Follower, For T%d->T%d",
 		rf.role, rf.CurrentTerm, term)
 
+	rf.role = Follower
+
+	shouldPersit := rf.CurrentTerm != term
 	// 	如果当前任期小，说明自己是leader、follower或者是candidate但是版本落后，可能是出现了分区，然后就可以走一步，因为他们肯定不需要参与这一轮的投票，所以VotedFor应当为-1，表示清除投票
 	// 如果任期相同，说明只本来是 Candidate ，它一定投了自己。而论文中说的是不能在同一 term 中投两次，因此不能清除投票。即，一旦投了，就不能再撤回甚至改投了。
 	if term > rf.CurrentTerm {
 		rf.VotedFor = -1
 	}
-	rf.role = Follower
 	rf.CurrentTerm = term
+
+	//term 是有可能不变的。在 term 不变时，并不需要 persist 因为 term 不变，votedFor 一定不会被重新赋值。
+	if shouldPersit {
+		rf.persistLock()
+	}
 }
 
 func (rf *Raft) becomeCandidate() {
@@ -104,6 +111,9 @@ func (rf *Raft) becomeCandidate() {
 	rf.role = Candidate
 	rf.CurrentTerm++
 	rf.VotedFor = rf.me
+
+	// 持久化更新的数据
+	rf.persistLock()
 }
 
 func (rf *Raft) becomeLeader() {

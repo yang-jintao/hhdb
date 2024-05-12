@@ -29,6 +29,10 @@ type AppendEntriesArgs struct {
 type AppendEntriesReply struct {
 	Term    int64
 	Success bool // true if follower contained entry matching prevLogIndex and prevLogTerm
+
+	// 主从节点日志匹配不上时的从库日志索引
+	ConflictIndex int
+	ConflictTerm  int64
 }
 
 func (rf *Raft) replicationTicker(term int64) {
@@ -59,15 +63,48 @@ func (rf *Raft) startReplication(term int64) bool {
 			return
 		}
 
+		// check context lost
+		if rf.contextLostLocked(Leader, term) {
+			LOG(rf.me, int(rf.CurrentTerm), DLog, "-> S%d, Context Lost, T%d:Leader->T%d:%s", peer, term, rf.CurrentTerm, rf.role)
+			return
+		}
+
 		if !reply.Success {
-			idx := rf.nextIndex[peer] - 1
-			term := rf.log[idx].Term
-			for idx > 0 && rf.log[idx].Term == term {
-				idx--
+			// 与从节点冲突时，一个一个任期的回退，这样在大量日志不对齐的情况下，很耗性能
+			//idx := rf.nextIndex[peer] - 1
+			//term := rf.log[idx].Term
+			//for idx > 0 && rf.log[idx].Term == term {
+			//	idx--
+			//}
+			//rf.nextIndex[peer] = idx + 1
+			//LOG(rf.me, int(rf.CurrentTerm), DLog, "Log not matched in %d, Update next=%d",
+			//	args.PrevLogIndex, rf.nextIndex[peer])
+			//return
+
+			preIndex := rf.nextIndex[peer]
+			// 从节点给出冲突的索引及任期
+			// 说明从节点日志太短
+			if reply.ConflictTerm == InvalidTerm {
+				rf.nextIndex[peer] = reply.ConflictIndex
+			} else {
+				firstIndex := rf.firstLogFor(reply.ConflictTerm)
+				if firstIndex != InvalidIndex {
+					rf.nextIndex[peer] = firstIndex
+				} else {
+					rf.nextIndex[peer] = reply.ConflictIndex
+				}
 			}
-			rf.nextIndex[peer] = idx + 1
-			LOG(rf.me, int(rf.CurrentTerm), DLog, "Log not matched in %d, Update next=%d",
-				args.PrevLogIndex, rf.nextIndex[peer])
+
+			// 避免乱序
+			// 匹配探测期比较长时，会有多个探测的 RPC，如果 RPC 结果乱序回来：
+			// 一个先发出去的探测 RPC 后回来了，其中所携带的 ConfilictTerm 和 ConfilictIndex 就有可能造成 rf.next 的“反复横跳”。
+			if rf.nextIndex[peer] > preIndex {
+				rf.nextIndex[peer] = preIndex
+			}
+
+			LOG(rf.me, int(rf.CurrentTerm), DLog, "-> S%d, Not matched at Prev=[%d]T%d, Try next Prev=[%d]T%d",
+				peer, args.PrevLogIndex, args.PrevLogTerm, rf.nextIndex[peer]-1, rf.log[rf.nextIndex[peer]-1])
+			LOG(rf.me, int(rf.CurrentTerm), DDebug, "-> S%d, Leader log=%v", peer, rf.logString())
 			return
 		}
 
@@ -75,7 +112,8 @@ func (rf *Raft) startReplication(term int64) bool {
 		rf.nextIndex[peer] = rf.matchIndex[peer] + 1
 
 		majorityMatched := rf.getMajorityIndexLocked()
-		if majorityMatched > rf.commitIndex {
+		// 第二个判断条件，是指只能本次任期的提交来间接提交之前任期的log
+		if majorityMatched > rf.commitIndex && rf.log[majorityMatched].Term == rf.CurrentTerm {
 			LOG(rf.me, int(rf.CurrentTerm), DApply, "Leader update the commit index %d->%d",
 				rf.commitIndex, majorityMatched)
 			rf.commitIndex = majorityMatched
