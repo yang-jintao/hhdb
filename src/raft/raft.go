@@ -40,7 +40,6 @@ type ApplyMsg struct {
 	Command      interface{}
 	CommandIndex int
 
-	// For PartD:
 	SnapshotValid bool
 	Snapshot      []byte
 	SnapshotTerm  int

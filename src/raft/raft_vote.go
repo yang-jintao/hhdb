@@ -210,7 +210,7 @@ func (rf *Raft) startElection(term int64) {
 		return
 	}
 
-	l := rf.log.size()
+	lastIdx, lastTerm := rf.log.last()
 	for peer := 0; peer < len(rf.peers); peer++ {
 		if peer == rf.me {
 			voted++
@@ -220,8 +220,8 @@ func (rf *Raft) startElection(term int64) {
 		requestArgs := &RequestVoteArgs{
 			Term:         rf.currentTerm,
 			CandidateId:  rf.me,
-			LastLogIndex: l - 1,
-			LastLogTerm:  rf.log.at(l - 1).Term,
+			LastLogIndex: lastIdx,
+			LastLogTerm:  lastTerm,
 			//CandidateId: rf.VotedFor,
 		}
 
