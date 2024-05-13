@@ -1,5 +1,6 @@
 package raft
 
+// todo: 这里要改造成接受snapshot
 func (rf *Raft) applyTicker() {
 	for !rf.killed() {
 		rf.mu.Lock()
