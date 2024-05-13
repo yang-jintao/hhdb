@@ -1,6 +1,7 @@
 package kv_raft
 
 import (
+	"bytes"
 	"hhdb/labgob"
 	"hhdb/labrpc"
 	"hhdb/raft"
@@ -10,12 +11,13 @@ import (
 )
 
 type KVServer struct {
-	mu          sync.Mutex
-	me          int
-	raft        *raft.Raft
-	dead        int32 // set by Kill()
-	applyCh     chan raft.ApplyMsg
-	lastApplied int
+	mu           sync.Mutex
+	me           int
+	raft         *raft.Raft
+	dead         int32 // set by Kill()
+	applyCh      chan raft.ApplyMsg
+	lastApplied  int
+	maxraftstate int // snapshot if log grows this big
 
 	duplicateTable map[int64]LastOperationInfo
 	stateMachine   *MemoryKVStateMachine
@@ -46,15 +48,13 @@ func StartKVServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persiste
 	kv.applyCh = make(chan raft.ApplyMsg)
 	kv.raft = raft.Make(servers, me, persister, kv.applyCh)
 
-	// You may need initialization code here.
 	kv.dead = 0
 	kv.lastApplied = 0
 	kv.stateMachine = NewMemoryKVStateMachine()
 	kv.notifyChans = make(map[int]chan *OpReply)
 	kv.duplicateTable = make(map[int64]LastOperationInfo)
-
 	// 从 snapshot 中恢复状态
-	//kv.restoreFromSnapshot(persister.ReadSnapshot())
+	kv.restoreFromSnapshot(persister.ReadSnapshot())
 
 	go kv.applyTask()
 	return kv
@@ -182,10 +182,30 @@ func (kv *KVServer) applyTask() {
 					notifyChan <- opReply
 				}
 
+				// 判断是否需要做snapshot
+				if kv.maxraftstate != -1 && kv.raft.GetRaftStateSize() >= kv.maxraftstate {
+					// 状态机数据做snapshot，推送snapshot给raft模块
+					kv.makeSnapshot(message.CommandIndex)
+				}
+
+				kv.mu.Unlock()
+			} else if message.SnapshotValid { // 如果raft模块给的消息是snapshot，则用snapshot覆盖状态机(目前想到的就是主节点给从节点复制日志时，发生截断的场景)
+				kv.mu.Lock()
+				kv.restoreFromSnapshot(message.Snapshot)
+				kv.lastApplied = message.SnapshotIndex
 				kv.mu.Unlock()
 			}
 		}
 	}
+}
+
+func (kv *KVServer) makeSnapshot(index int) {
+	buf := new(bytes.Buffer)
+	enc := labgob.NewEncoder(buf)
+	enc.Encode(kv.stateMachine)
+	enc.Encode(kv.duplicateTable)
+	// 告诉raft模块，对应索引之前的日志做snapshot
+	kv.raft.Snapshot(index, buf.Bytes())
 }
 
 func (kv *KVServer) killed() bool {
@@ -232,4 +252,21 @@ func (kv *KVServer) getNotifyChan(index int) chan *OpReply {
 
 func (kv *KVServer) removeNotifyChannel(index int) {
 	delete(kv.notifyChans, index)
+}
+
+func (kv *KVServer) restoreFromSnapshot(snapshot []byte) {
+	if len(snapshot) == 0 {
+		return
+	}
+
+	buf := bytes.NewBuffer(snapshot)
+	dec := labgob.NewDecoder(buf)
+	var stateMachine MemoryKVStateMachine
+	var dupTable map[int64]LastOperationInfo
+	if dec.Decode(&stateMachine) != nil || dec.Decode(&dupTable) != nil {
+		panic("failed to restore state from snapshpt")
+	}
+
+	kv.stateMachine = &stateMachine
+	kv.duplicateTable = dupTable
 }
