@@ -67,7 +67,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		return
 	}
 
-	// install the snapshot in the memory/persister/app
+	// install the snapshot in the memory/persister/app todo: 每次回退时碰到snapshot截断，都要全量的从头开始同步日志。这样会不会开销太大了?
 	rf.log.installSnapshot(args.LastIncludedIndex, args.LastIncludedTerm, args.Snapshot)
 	rf.persistLock()
 	rf.snapPending = true
