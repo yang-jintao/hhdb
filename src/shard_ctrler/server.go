@@ -17,9 +17,9 @@ type ShardCtrler struct {
 
 	configs []Config // indexed by config num
 
-	dead        int32 // set by Kill()
-	lastApplied int
-	//stateMachine   *CtrlerStateMachine
+	dead           int32 // set by Kill()
+	lastApplied    int
+	stateMachine   *CtrlerStateMachine
 	notifyChans    map[int]chan *OpReply
 	duplicateTable map[int64]LastOperationInfo
 }
@@ -37,7 +37,7 @@ func StartServer(servers []*labrpc.ClientEnd, me int, persister *raft.Persister)
 
 	sc.dead = 0
 	sc.lastApplied = 0
-	//sc.stateMachine = NewCtrlerStateMachine()
+	sc.stateMachine = NewCtrlerStateMachine()
 	sc.notifyChans = make(map[int]chan *OpReply)
 	sc.duplicateTable = make(map[int64]LastOperationInfo)
 
@@ -66,7 +66,7 @@ func (sc *ShardCtrler) applyTask() {
 					opReply = sc.duplicateTable[op.ClientId].Reply
 				} else {
 					// 将操作应用状态机中
-					//opReply = sc.applyToStateMachine(op)
+					opReply = sc.applyToStateMachine(op)
 					if op.OpType != OpQuery {
 						sc.duplicateTable[op.ClientId] = LastOperationInfo{
 							SeqId: op.SeqId,
@@ -188,16 +188,16 @@ func (sc *ShardCtrler) killed() bool {
 func (sc *ShardCtrler) applyToStateMachine(op Op) *OpReply {
 	var err Err
 	var cfg Config
-	//switch op.OpType {
-	//case OpQuery:
-	//	cfg, err = sc.stateMachine.Query(op.Num)
-	//case OpJoin:
-	//	err = sc.stateMachine.Join(op.Servers)
-	//case OpLeave:
-	//	err = sc.stateMachine.Leave(op.GIDs)
-	//case OpMove:
-	//	err = sc.stateMachine.Move(op.Shard, op.GID)
-	//}
+	switch op.OpType {
+	case OpQuery:
+		cfg, err = sc.stateMachine.Query(op.Num)
+	case OpJoin:
+		err = sc.stateMachine.Join(op.Servers)
+	case OpLeave:
+		err = sc.stateMachine.Leave(op.GIDs)
+	case OpMove:
+		err = sc.stateMachine.Move(op.Shard, op.GID)
+	}
 	return &OpReply{ControllerConfig: cfg, Err: err}
 }
 
