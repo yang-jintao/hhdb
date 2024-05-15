@@ -17,19 +17,24 @@ func (kv *ShardKV) applyTask() {
 				kv.lastApplied = message.CommandIndex
 
 				// 取出用户的操作信息
-				op := message.Command.(Op)
 				var opReply *OpReply
-				if op.OpType != OpGet && kv.requestDuplicated(op.ClientId, op.SeqId) {
-					opReply = kv.duplicateTable[op.ClientId].Reply
-				} else {
-					// 将操作应用状态机中
-					opReply = kv.applyToStateMachine(op)
-					if op.OpType != OpGet {
-						kv.duplicateTable[op.ClientId] = LastOperationInfo{
-							SeqId: op.SeqId,
-							Reply: opReply,
+				raftCommand := message.Command.(RaftCommand)
+				if raftCommand.CmdType == ClientOperation {
+					op := raftCommand.Data.(Op)
+					if op.OpType != OpGet && kv.requestDuplicated(op.ClientId, op.SeqId) {
+						opReply = kv.duplicateTable[op.ClientId].Reply
+					} else {
+						// 将操作应用状态机中
+						opReply = kv.applyToStateMachine(op)
+						if op.OpType != OpGet {
+							kv.duplicateTable[op.ClientId] = LastOperationInfo{
+								SeqId: op.SeqId,
+								Reply: opReply,
+							}
 						}
 					}
+				} else {
+					kv.handleConfigChangeMessage(raftCommand)
 				}
 
 				// 将结果发送回去
