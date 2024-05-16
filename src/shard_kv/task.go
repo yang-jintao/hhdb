@@ -114,6 +114,37 @@ func (kv *ShardKV) shardMigrationTask() {
 	}
 }
 
+func (kv *ShardKV) shardGCTask() {
+	for {
+		if _, isLeader := kv.rf.GetState(); isLeader {
+			kv.mu.Lock()
+			gidToShards := kv.getShardByStatus(GC)
+			var wg sync.WaitGroup
+			for gid, shardIds := range gidToShards {
+				wg.Add(1)
+				go func(servers []string, configNum int, shardIds []int) {
+					wg.Done()
+					shardGCArgs := ShardOperationArgs{configNum, shardIds}
+					for _, server := range servers {
+						var shardGCReply ShardOperationReply
+						clientEnd := kv.make_end(server)
+						ok := clientEnd.Call("ShardKV.DeleteShardsData", &shardGCArgs, &shardGCReply)
+						if ok && shardGCReply.Err == OK {
+							kv.ConfigCommand(RaftCommand{
+								CmdType: ShardGC,
+								Data:    shardGCArgs,
+							}, &OpReply{})
+						}
+					}
+
+				}(kv.prevConfig.Groups[gid], kv.currentConfig.Num, shardIds) // todo: 为什么这里是prevConfig的group的服务访问地址
+			}
+			wg.Wait()
+			kv.mu.Unlock()
+		}
+	}
+}
+
 func (kv *ShardKV) getShardByStatus(status ShardStatus) map[int][]int {
 	gidToShards := make(map[int][]int)
 	for i, shard := range kv.shards {
@@ -156,6 +187,30 @@ func (kv *ShardKV) GetShardsData(args ShardOperationArgs, reply ShardOperationRe
 	for clientId, op := range kv.duplicateTable {
 		reply.DuplicateTable[clientId] = op.copyData()
 	}
+}
+
+func (kv *ShardKV) DeleteShardsData(args *ShardOperationArgs, reply *ShardOperationReply) {
+	// 只需要从 Leader 获取数据
+	if _, isLeader := kv.rf.GetState(); !isLeader {
+		reply.Err = ErrWrongLeader
+		return
+	}
+
+	kv.mu.Lock()
+	if kv.currentConfig.Num > args.ConfigNum {
+		reply.Err = OK
+		kv.mu.Unlock()
+		return
+	}
+	kv.mu.Unlock()
+
+	var opReply OpReply
+	kv.ConfigCommand(RaftCommand{
+		CmdType: ShardGC,
+		Data:    *args,
+	}, &opReply)
+
+	reply.Err = opReply.Err
 }
 
 func (kv *ShardKV) applyClientOperation(op Op) *OpReply {
