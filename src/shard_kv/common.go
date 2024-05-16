@@ -13,6 +13,16 @@ const (
 	ErrWrongLeader = "ErrWrongLeader"
 	ErrTimeout     = "ErrTimeout"
 	ErrWrongConfig = "ErrWrongConfig"
+	ErrNotReady    = "ErrNotReady"
+)
+
+type ShardStatus uint8
+
+const (
+	Normal ShardStatus = iota
+	MoveIn
+	MoveOut
+	GC
 )
 
 type Err string
@@ -98,14 +108,37 @@ type LastOperationInfo struct {
 	Reply *OpReply
 }
 
+func (op *LastOperationInfo) copyData() LastOperationInfo {
+	return LastOperationInfo{
+		SeqId: op.SeqId,
+		Reply: &OpReply{
+			Err:   op.Reply.Err,
+			Value: op.Reply.Value,
+		},
+	}
+}
+
 type RaftCommandType uint8
 
 const (
 	ClientOperation RaftCommandType = iota
 	ConfigChange
+	ShardMigration
 )
 
 type RaftCommand struct {
 	CmdType RaftCommandType
 	Data    interface{}
+}
+
+type ShardOperationArgs struct {
+	ConfigNum int
+	ShardIds  []int
+}
+
+type ShardOperationReply struct {
+	Err            Err
+	ConfigNum      int
+	ShardData      map[int]map[string]string
+	DuplicateTable map[int64]LastOperationInfo
 }

@@ -5,9 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="76059c87-9f34-429e-bc62-3e612107441f" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/shard_kv/conf_change.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/shard_kv/common.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/shard_kv/common.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/shard_kv/conf_change.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/shard_kv/conf_change.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/shard_kv/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/shard_kv/server.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/shard_kv/state_machine.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/shard_kv/state_machine.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/shard_kv/task.go" beforeDir="false" afterPath="$PROJECT_DIR$/src/shard_kv/task.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
