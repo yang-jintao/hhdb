@@ -124,6 +124,7 @@ const (
 	ClientOperation RaftCommandType = iota
 	ConfigChange
 	ShardMigration
+	ShardGC
 )
 
 type RaftCommand struct {
